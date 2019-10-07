@@ -64,3 +64,4 @@ vector<int> Matrix::split(string str, char delimiter) {
 
 	return internal;
 }
+
