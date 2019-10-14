@@ -10,11 +10,13 @@ public:
 	Matrix(string filename);
 	// Use vector to build matrix
 	Matrix(vector <vector<int>> mVector);
+	// Create an empty array with a size
+	Matrix(int height, int width);
 
 	~Matrix();
 
 	vector <vector<int>> mVector;
-	
+
 	// Getters
 	size_t height();
 	size_t width();
@@ -25,4 +27,3 @@ public:
 private:
 	vector<int> split(string str, char delimiter);
 };
-

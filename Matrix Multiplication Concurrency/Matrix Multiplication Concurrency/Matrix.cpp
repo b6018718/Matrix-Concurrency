@@ -16,7 +16,8 @@ Matrix::Matrix(string filename)
 			mVector.push_back(matrixLine);
 		}
 		myfile.close();
-	} else {
+	}
+	else {
 		puts("File cannot be opened");
 	}
 }
@@ -24,6 +25,17 @@ Matrix::Matrix(string filename)
 // This uses a member initialiser list
 Matrix::Matrix(vector<vector<int>> mVector) : mVector(mVector)
 {
+}
+
+Matrix::Matrix(int height, int width)
+{
+	for (size_t i = 0; i < height; i++) {
+		vector <int> newVector;
+		for (size_t j = 0; j < width; j++) {
+			newVector.push_back(0);
+		}
+		mVector.push_back(newVector);
+	}
 }
 
 Matrix::~Matrix()
@@ -43,8 +55,8 @@ size_t Matrix::width()
 void Matrix::save(string filename)
 {
 	std::ofstream textFile(filename);
-	for (size_t i = 0; i < mVector.size(); i++){
-		for (size_t j = 0; j < mVector[i].size(); j++){
+	for (size_t i = 0; i < mVector.size(); i++) {
+		for (size_t j = 0; j < mVector[i].size(); j++) {
 			textFile << mVector[i][j] << " ";
 		}
 		textFile << endl;
