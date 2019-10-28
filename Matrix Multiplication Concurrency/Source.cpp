@@ -10,6 +10,7 @@
 #include <mutex>
 #include "Matrix.h"
 #include <windows.h>
+#include <future>
 
 using namespace std;
 
@@ -27,7 +28,7 @@ Matrix* multiplyMatricesUsingTiles(Matrix* matrix1, Matrix* matrix2, int tileSiz
 void multiplyMatricesWithRange(Matrix* matrix1, Matrix* matrix2, Matrix* matrix3, Tile tileA, Tile tileB);
 void startCounter();
 double getCounter();
-void appendToFile(string text, string file);
+void appendToFile(string text, string file, std::promise<bool> promise);
 // Global variables
 std::mutex mtx;
 double pcFrequency = 0.0;
@@ -74,7 +75,20 @@ int main() {
 			matrix3->save("MatrixOutput.txt");
 			timeTaken = getCounter();
 			cout << "Save matrix " << timeTaken << "ms\n";
-			appendToFile(to_string(timeTaken), "LogFile.txt");
+			
+
+			// Example of promises
+			std::promise <bool> savedPromise;
+			std::future<bool> fut = savedPromise.get_future();
+
+			std::thread t(appendToFile, to_string(timeTaken), "LogFile.txt", std::move(savedPromise));
+			bool sucessfulSave = fut.get();
+			
+			// Remember to join the thread
+			t.join();
+
+			timeTaken = getCounter();
+			cout << "Log time: " << timeTaken << "ms\n";
 
 			delete matrix1;
 			delete matrix2;
@@ -86,16 +100,16 @@ int main() {
 		}
 	}
 
-
 	//system("pause");
 
 	return 0;
 }
 
-void appendToFile(string text, string file) {
+void appendToFile(string text, string file, std::promise<bool> promise) {
 	std::ofstream outfile;
 	outfile.open(file, std::ios_base::app);
 	outfile << text << "\n";
+	promise.set_value(true);
 }
 
 void startCounter() {
