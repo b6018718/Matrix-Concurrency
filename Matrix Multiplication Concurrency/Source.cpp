@@ -9,8 +9,7 @@
 #include <math.h>
 #include <mutex>
 #include "Matrix.h"
-#include <windows.h>
-#include <future>
+#include "ThreadPool.hpp"
 
 using namespace std;
 
@@ -25,20 +24,18 @@ struct Tile {
 // Declare Functions
 Matrix* multiplyMatrices(Matrix* matrix1, Matrix* matrix2, int maxThreads);
 Matrix* multiplyMatricesUsingTiles(Matrix* matrix1, Matrix* matrix2, int tileSize);
-void multiplyMatricesWithRange(Matrix* matrix1, Matrix* matrix2, Matrix* matrix3, Tile tileA, Tile tileB);
-void startCounter();
-double getCounter();
-void appendToFile(string text, string file, std::promise<bool> promise);
-// Global variables
+bool multiplyMatricesWithRange(Matrix* matrix1, Matrix* matrix2, Matrix* matrix3, Tile tileA, Tile tileB);
+// Global variable
 std::mutex mtx;
-double pcFrequency = 0.0;
-__int64 counterStart = 0;
+
+// Create the thread pool
+ThreadPool pool(4);
 
 int main() {
 	//puts("Hello world!");
 	int maxThreads(1);
-	double timeTaken;
 	bool exit(false);
+
 	while (!exit) {
 		//cout << "Maximum number of threads? (Exit = -1)";
 		cout << "Tile size? (Exit = -1)";
@@ -50,45 +47,13 @@ int main() {
 			auto timer1 = std::chrono::high_resolution_clock::now();
 
 			// Create the two matrix objects
-			startCounter();
-			Matrix* matrix1 = new Matrix("MatrixInput3.txt");
-			Matrix* matrix2 = new Matrix("MatrixInput3.txt");
-			cout << "Create matrices " << getCounter() << "ms\n";
-
-
+			Matrix* matrix1 = new Matrix("MatrixInput1.txt");
+			Matrix* matrix2 = new Matrix("MatrixInput2.txt");
 			// Multiple the matrices 
-			startCounter();
-
-			// Series
-			//maxThreads = 8;
-			Matrix* matrix3 = multiplyMatrices(matrix1, matrix2, maxThreads);
-
-			// Parallel
-			//Matrix* matrix3 = multiplyMatricesUsingTiles(matrix1, matrix2, maxThreads);
-			double timeTaken = getCounter();
-			cout << "Multiply matrices " << timeTaken << "ms\n";
-
-			
-
+			//Matrix* matrix3 = multiplyMatrices(matrix1, matrix2, maxThreads);
+			Matrix* matrix3 = multiplyMatricesUsingTiles(matrix1, matrix2, maxThreads);
 			// Write multiplied matrix to a file
-			startCounter();
 			matrix3->save("MatrixOutput.txt");
-			timeTaken = getCounter();
-			cout << "Save matrix " << timeTaken << "ms\n";
-			
-
-			// Example of promises
-			std::promise <bool> savedPromise;
-			std::future<bool> fut = savedPromise.get_future();
-
-			std::thread t(appendToFile, to_string(timeTaken), "LogFile.txt", std::move(savedPromise));
-			bool sucessfulSave = fut.get();
-			
-			// Remember to join the thread
-			t.join();
-
-			timeTaken = getCounter();
-			cout << "Log time: " << timeTaken << "ms\n";
 
 			delete matrix1;
 			delete matrix2;
@@ -96,39 +61,15 @@ int main() {
 
 			auto timer2 = std::chrono::high_resolution_clock::now();
 			auto duration = std::chrono::duration_cast<std::chrono::microseconds>(timer2 - timer1).count();
-			//cout << "Time: " << duration << "\n";
+			cout << "Time: " << duration << "\n";
 		}
 	}
+
 
 	//system("pause");
 
 	return 0;
 }
-
-void appendToFile(string text, string file, std::promise<bool> promise) {
-	std::ofstream outfile;
-	outfile.open(file, std::ios_base::app);
-	outfile << text << "\n";
-	promise.set_value(true);
-}
-
-void startCounter() {
-	LARGE_INTEGER li;
-	if (!QueryPerformanceFrequency(&li)) {
-		cout << "QueryPerformanceFrequency failed!\n";
-	}
-
-	pcFrequency = double(li.QuadPart) / 1000.0;
-	QueryPerformanceCounter(&li);
-	counterStart = li.QuadPart;
-}
-
-double getCounter() {
-	LARGE_INTEGER li;
-	QueryPerformanceCounter(&li);
-	return double(li.QuadPart - counterStart) / pcFrequency;
-}
-
 
 void computeRow(Matrix* matrix1, Matrix* matrix2, vector <vector<int>>& newMatrixArray, int i, int numberPerThread) {
 	// Loop through columns of 2
@@ -184,6 +125,7 @@ Matrix* multiplyMatricesUsingTiles(Matrix* matrix1, Matrix* matrix2, int tileSiz
 	// Loop through rows of 1
 	vector <thread> threadVector;
 	std::mutex lock;
+	std::vector< std::future<bool> > results;
 	
 	// Matrix 1 Columns
 	for (size_t i = 0; i < numberOfTilesX; i++){
@@ -205,12 +147,19 @@ Matrix* multiplyMatricesUsingTiles(Matrix* matrix1, Matrix* matrix2, int tileSiz
 				matrix2Tile.endy = (i * tileSize) + tileSize - 1;
 
 				// Start a new thread
-				threadVector.push_back(thread(multiplyMatricesWithRange, std::ref(matrix1), std::ref(matrix2), std::ref(matrix3), matrix1Tile, matrix2Tile));
+				//threadVector.push_back(thread(multiplyMatricesWithRange, std::ref(matrix1), std::ref(matrix2), std::ref(matrix3), matrix1Tile, matrix2Tile));
 
 				// Single threaded
 				//multiplyMatricesWithRange(matrix1, matrix2, matrix3, matrix1Tile, matrix2Tile);
+
+				// Pool based threads
+				results.emplace_back(pool.enqueue(multiplyMatricesWithRange, std::ref(matrix1), std::ref(matrix2), std::ref(matrix3), matrix1Tile, matrix2Tile));
 			}
 		}
+	}
+
+	for (auto && result : results){
+		result.get();
 	}
 
 	for (size_t i = 0; i < threadVector.size(); i++) {
@@ -221,7 +170,7 @@ Matrix* multiplyMatricesUsingTiles(Matrix* matrix1, Matrix* matrix2, int tileSiz
 	return matrix3;
 }
 
-void multiplyMatricesWithRange(Matrix* matrix1, Matrix* matrix2, Matrix* matrix3, Tile tileA, Tile tileB) {
+bool multiplyMatricesWithRange(Matrix* matrix1, Matrix* matrix2, Matrix* matrix3, Tile tileA, Tile tileB) {
 	for (size_t i = tileA.starty; i <= tileA.endy; i++) {
 		for (size_t j = tileB.startx; j <= tileB.endx; j++) {
 			// Loop through rows of 2
@@ -233,7 +182,7 @@ void multiplyMatricesWithRange(Matrix* matrix1, Matrix* matrix2, Matrix* matrix3
 			}
 		}
 	}
-
+	return true;
 }
 
 Matrix* multiplyMatrices(Matrix* matrix1, Matrix* matrix2, int maxThreads) {
